@@ -1,0 +1,11 @@
+## Interface: 20300
+## Title: Remebrance
+## Notes: Saves and shows players talents
+## Author: Shadowed
+## SavedVariables: RemembranceTalents
+
+localization.enUS.lua
+localization.frFR.lua
+localization.deDE.lua
+
+Remembrance.lua
