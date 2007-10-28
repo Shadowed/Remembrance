@@ -132,7 +132,7 @@ SlashCmdList["REMQUICKIN"] = function(unit)
 
 	-- Make sure we can actually inspect it
 	if( not UnitIsPlayer(unit) or not UnitExists(unit) ) then
-		self:Print(string.format(L["Cannot inspect unit \"%s\", you can only inspect players, and people who are within visible range (100 yards) of you."], unit))
+		Remembrance:Print(string.format(L["Cannot inspect unit \"%s\", you can only inspect players, and people who are within visible range (100 yards) of you."], unit))
 		return
 	end
 
