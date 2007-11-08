@@ -7,6 +7,10 @@ local sentPlayerServer
 local sentPlayerName
 local requestSent
 
+function Remembrance:Echo(msg)
+	DEFAULT_CHAT_FRAME:AddMessage(msg)
+end
+
 function Remembrance:Print(msg)
 	DEFAULT_CHAT_FRAME:AddMessage("|cFF33FF99Remembrance|r: " .. msg)
 end
@@ -39,6 +43,7 @@ end
 
 -- Save the information by name/server
 function Remembrance:SaveTalentInfo(name, server)
+	-- Yea yea, this is ugly
 	local spentPoints = {}
 	for i=1, GetNumTalentTabs(true) do
 		local _, _, points = GetTalentTabInfo(i, true)
@@ -76,6 +81,8 @@ function Remembrance:InspectFrame_Show()
 end
 
 -- /whistle
+-- This isn't exactly a good method for this, but it's quick and easy
+-- May change it later, maybe add a range check. Not sure yet.
 local Orig_CanInspect
 function Remembrance:HookCanInspect()
 	if( Orig_CanInspect ) then
@@ -102,17 +109,56 @@ SlashCmdList["REMINSPECT"] = function()
 	end
 end
 
+-- Reset things
+SLASH_REMEMBRANCE1 = "/rem"
+SLASH_REMEMBRANCE2 = "/remembrance"
+SlashCmdList["REMEMBRANCE"] = function(msg)
+	local self = Remembrance
+	
+	if( msg == "reset" ) then
+		RemembranceTalents = {}
+		self:Print(L["All saved data has been reset"])
+	
+	elseif( msg == "info" ) then
+		local servers = {}
+		local total = 0
+		for player, talent in pairs(RemembranceTalents) do
+			local name, server = string.split("-", player)
+			servers[server] = (servers[server] or 0 ) + 1
+			total = total + 1
+		end
+		
+		self:Print(string.format(L["Total players saved %d"], total))
+		
+		for server, total in pairs(servers) do
+			self:Echo(string.format(L["%s (%d)"], server, total))
+		end
+		
+	elseif( msg == "cancel" ) then
+		self:Print(L["Sync canceled, if you still have issues please do a /console reloadui. It'll usually take a few seconds for results to come back however from /reminspect."])
+	else
+		self:Echo(L["/inspect - Inspect a player, allows you to see the full talent tree."])
+		self:Echo(L["/reminspect - Gets quick talent information for a player, shows name, server and total points spent."])
+		self:Echo(L["/remembrance cancel - Cancels a sent /reminspect request (shouldn't need this)."])
+		self:Echo(L["/remembrance reset - Resets saved talent information"])
+		self:Echo("")
+		self:Echo(L["Both /inspect and /reminspect work regardless of player faction, and range as long as they're within 100 yards. You still cannot get the gear of a player from an enemy faction however."])
+	end
+end
+
 -- Quick inspect to only get the talent information
 SLASH_REMQUICKIN1 = "/reminspect"
 SLASH_REMQUICKIN2 = "/remin"
 SLASH_REMQUICKIN3 = "/remembranceinspect"
 SlashCmdList["REMQUICKIN"] = function(unit)
+	local self = Remembrance
+	
 	-- Can only send one request at a time
 	if( requestSent ) then
 		if( sentPlayerName and sentPlayerServer ) then
-			Remembrance:Print(string.format(L["Request has already been sent for %s of %s, please wait for it to finish."], sentPlayerName, sentPlayerServer))
+			self:Print(string.format(L["Request has already been sent for %s of %s, please wait for it to finish."], sentPlayerName, sentPlayerServer))
 		else
-			Remembrance:Print(L["Request has already been sent, please wait for it to finish."])
+			self:Print(L["Request has already been sent, please wait for it to finish."])
 		end
 		return
 	end
@@ -126,13 +172,13 @@ SlashCmdList["REMQUICKIN"] = function(unit)
 
 	-- Valid it
 	if( unit ~= "mouseover" and unit ~= "player" and unit ~= "target" and unit ~= "focus" and not string.match(unit, "party[1-4]") and not string.match(unit, "raid[1-40]") ) then
-		Remembrance:Print(string.format(L["Invalid unit \"%s\" entered, required player, target, focus, mouseover, party1-4, raid1-40"], unit))
+		self:Print(string.format(L["Invalid unit \"%s\" entered, required player, target, focus, mouseover, party1-4, raid1-40"], unit))
 		return
 	end
 
-	-- Make sure we can actually inspect it
+	-- Make sure we can actually inspect them
 	if( not UnitIsPlayer(unit) or not UnitExists(unit) ) then
-		Remembrance:Print(string.format(L["Cannot inspect unit \"%s\", you can only inspect players, and people who are within visible range (100 yards) of you."], unit))
+		self:Print(string.format(L["Cannot inspect unit \"%s\", you can only inspect players, and people who are within visible range (100 yards) of you."], unit))
 		return
 	end
 
@@ -168,7 +214,7 @@ frame:SetScript("OnEvent", function(self, event, addon)
 			RemembranceTalents = {}
 		end
 	
-	-- Inspect loaded, load our hooks
+	-- Inspect loaded, load our hook
 	elseif( event == "ADDON_LOADED" and addon == "Blizzard_InspectUI" ) then
 		Remembrance:HookCanInspect()
 		hooksecurefunc("InspectFrame_Show", Remembrance.InspectFrame_Show)
