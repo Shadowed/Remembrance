@@ -15,6 +15,8 @@ RemembranceLocals = {
 	["Sync canceled, if you still have issues please do a /console reloadui. It'll usually take a few seconds for results to come back however from /reminspect."] = "Sync canceled, if you still have issues please do a /console reloadui. It'll usually take a few seconds for results to come back however from /reminspect.",
 	["All saved data has been reset"] = "All saved data has been reset",
 	
+	["Failed to load Blizzard_InspectUI."] = "Failed to load Blizzard_InspectUI.",
+	
 	["Total players saved %d"] = "Total players saved %d",
 	["%s (%d)"] = "%s (%d)",
 }

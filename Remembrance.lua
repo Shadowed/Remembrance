@@ -2,7 +2,7 @@ Remembrance = {}
 
 local L = RemembranceLocals
 
-local notifyTalents = true
+local notifyTalents
 local sentPlayerServer
 local sentPlayerName
 local requestSent
@@ -43,26 +43,19 @@ end
 
 -- Save the information by name/server
 function Remembrance:SaveTalentInfo(name, server)
-	-- Yea yea, this is ugly
-	local spentPoints = {}
-	for i=1, GetNumTalentTabs(true) do
-		local _, _, points = GetTalentTabInfo(i, true)
-		
-		table.insert(spentPoints, points)
-	end
-	
-	RemembranceTalents[name .. "-" .. server] = table.concat(spentPoints, "/")
+	name = name .. "-" .. server
+	RemembranceTalents[name] = (select(3, GetTalentTabInfo(1, true)) or 0) .. "/" ..  (select(3, GetTalentTabInfo(2, true)) or 0) .. "/" ..  (select(3, GetTalentTabInfo(3, true)) or 0)
 	
 	if( notifyTalents ) then
-		self:Print(name .. "-" .. server .. ": " .. RemembranceTalents[name .. "-" .. server])
 		notifyTalents = nil
+		self:Print(name .. ": " .. RemembranceTalents[name])
 	end
 end
 
 -- USE THIS INSTEAD OF CALLING THE SV TABLE
 function Remembrance:GetTalents(name, server)
 	if( not RemembranceTalents[name .. "-" .. server] ) then
-		return nil
+		return nil, nil, nil
 	end
 	
 	local tree1, tree2, tree3 = string.split("/", RemembranceTalents[name .. "-" .. server])
@@ -99,50 +92,36 @@ function Remembrance:HookCanInspect()
 	end
 end
 
+-- Validate unit
+function Remembrance:ValidateUnit(unit)
+	unit = string.lower(string.trim(unit))
+	
+	if( unit == "mouseover" or unit == "player" or unit == "target" or unit == "focus" or string.match(unit, "party[1-4]") or string.match(unit, "raid[1-40]") ) then
+		return true
+	end
+	
+	return nil
+end
+
 -- Inspect to show the entire tree
 SLASH_REMINSPECT1 = "/inspect"
 SLASH_REMINSPECT2 = "/in"
-SlashCmdList["REMINSPECT"] = function()
+SlashCmdList["REMINSPECT"] = function(unit)
 	LoadAddOn("Blizzard_InspectUI")
 	if( IsAddOnLoaded("Blizzard_InspectUI") ) then
-		InspectFrame_Show("target")
-	end
-end
+		unit = string.trim(unit or "")
+		if( unit == "" ) then
+			unit = "target"
+		end
 
--- Reset things
-SLASH_REMEMBRANCE1 = "/rem"
-SLASH_REMEMBRANCE2 = "/remembrance"
-SlashCmdList["REMEMBRANCE"] = function(msg)
-	local self = Remembrance
+		if( not Remembrance:ValidateUnit(unit) ) then
+			Remembrance:Print(string.format(L["Invalid unit \"%s\" entered, required player, target, focus, mouseover, party1-4, raid1-40"], unit))
+			return
+		end		
 	
-	if( msg == "reset" ) then
-		RemembranceTalents = {}
-		self:Print(L["All saved data has been reset"])
-	
-	elseif( msg == "info" ) then
-		local servers = {}
-		local total = 0
-		for player, talent in pairs(RemembranceTalents) do
-			local name, server = string.split("-", player)
-			servers[server] = (servers[server] or 0 ) + 1
-			total = total + 1
-		end
-		
-		self:Print(string.format(L["Total players saved %d"], total))
-		
-		for server, total in pairs(servers) do
-			self:Echo(string.format(L["%s (%d)"], server, total))
-		end
-		
-	elseif( msg == "cancel" ) then
-		self:Print(L["Sync canceled, if you still have issues please do a /console reloadui. It'll usually take a few seconds for results to come back however from /reminspect."])
+		InspectFrame_Show(unit)
 	else
-		self:Echo(L["/inspect - Inspect a player, allows you to see the full talent tree."])
-		self:Echo(L["/reminspect - Gets quick talent information for a player, shows name, server and total points spent."])
-		self:Echo(L["/remembrance cancel - Cancels a sent /reminspect request (shouldn't need this)."])
-		self:Echo(L["/remembrance reset - Resets saved talent information"])
-		self:Echo("")
-		self:Echo(L["Both /inspect and /reminspect work regardless of player faction, and range as long as they're within 100 yards. You still cannot get the gear of a player from an enemy faction however."])
+		Remembrance:Print(L["Failed to load Blizzard_InspectUI."])
 	end
 end
 
@@ -170,8 +149,8 @@ SlashCmdList["REMQUICKIN"] = function(unit)
 		unit = "target"
 	end
 
-	-- Valid it
-	if( unit ~= "mouseover" and unit ~= "player" and unit ~= "target" and unit ~= "focus" and not string.match(unit, "party[1-4]") and not string.match(unit, "raid[1-40]") ) then
+	-- Validate it
+	if( not self:ValidateUnit(unit) ) then
 		self:Print(string.format(L["Invalid unit \"%s\" entered, required player, target, focus, mouseover, party1-4, raid1-40"], unit))
 		return
 	end
@@ -196,12 +175,54 @@ SlashCmdList["REMQUICKIN"] = function(unit)
 	NotifyInspect(unit)
 end
 
+-- Reset things
+SLASH_REMEMBRANCE1 = "/rem"
+SLASH_REMEMBRANCE2 = "/remembrance"
+SlashCmdList["REMEMBRANCE"] = function(msg)
+	local self = Remembrance
+	
+	if( msg == "reset" ) then
+		self:Print(L["All saved data has been reset"])
+
+		RemembranceTalents = {}
+	
+	elseif( msg == "info" ) then
+		local servers = {}
+		local total = 0
+		for player, talent in pairs(RemembranceTalents) do
+			local name, server = string.split("-", player)
+			servers[server] = (servers[server] or 0 ) + 1
+			total = total + 1
+		end
+		
+		self:Print(string.format(L["Total players saved %d"], total))
+		
+		for server, total in pairs(servers) do
+			self:Echo(string.format(L["%s (%d)"], server, total))
+		end
+		
+	elseif( msg == "cancel" ) then
+		self:Print(L["Sync canceled, if you still have issues please do a /console reloadui. It'll usually take a few seconds for results to come back however from /reminspect."])
+
+		requestSent = nil
+		notifyTalents = nil
+		sentPlayerName = nil
+		sentPlayerServer = nil
+	else
+		self:Echo(L["/inspect <unit> - Inspect a player, allows you to see the full talent tree."])
+		self:Echo(L["/reminspect <unit> - Gets quick talent information for a player, shows name, server and total points spent."])
+		self:Echo(L["/remembrance cancel - Cancels a sent /reminspect request (shouldn't need this)."])
+		self:Echo(L["/remembrance reset - Resets saved talent information"])
+		self:Echo("")
+		self:Echo(L["Both /inspect and /reminspect work regardless of player faction, and range as long as they're within 100 yards. You still cannot get the gear of a player from an enemy faction however."])
+	end
+end
+
 -- For loading of course
 local frame = CreateFrame("Frame")
 frame:RegisterEvent("ADDON_LOADED")
 frame:RegisterEvent("INSPECT_TALENT_READY")
 frame:SetScript("OnEvent", function(self, event, addon)
-	-- We loaded
 	if( event == "ADDON_LOADED" and addon == "Remembrance" ) then
 		-- Load our hook if the InspectUI was already loaded by another addon
 		if( IsAddOnLoaded("Blizzard_InspectUI") ) then
@@ -213,7 +234,8 @@ frame:SetScript("OnEvent", function(self, event, addon)
 		if( not RemembranceTalents ) then
 			RemembranceTalents = {}
 		end
-	
+		
+
 	-- Inspect loaded, load our hook
 	elseif( event == "ADDON_LOADED" and addon == "Blizzard_InspectUI" ) then
 		Remembrance:HookCanInspect()
