@@ -3,9 +3,13 @@ Remembrance = {}
 local L = RemembranceLocals
 
 local notifyTalents
+local notifyDifference
 local sentPlayerServer
 local sentPlayerName
 local requestSent
+
+local inspectQueue = {}
+local alreadyQueued = {}
 
 function Remembrance:Echo(msg)
 	DEFAULT_CHAT_FRAME:AddMessage(msg)
@@ -17,7 +21,8 @@ end
 
 function Remembrance:INSPECT_TALENT_READY()
 	requestSent = nil
-	
+		
+
 	-- Request sent through Remembrance
 	if( sentPlayerName and sentPlayerServer ) then
 		self:SaveTalentInfo(sentPlayerName, sentPlayerServer)
@@ -44,12 +49,16 @@ end
 -- Save the information by name/server
 function Remembrance:SaveTalentInfo(name, server)
 	name = name .. "-" .. server
-	RemembranceTalents[name] = (select(3, GetTalentTabInfo(1, true)) or 0) .. "/" ..  (select(3, GetTalentTabInfo(2, true)) or 0) .. "/" ..  (select(3, GetTalentTabInfo(3, true)) or 0)
+	local talent = (select(3, GetTalentTabInfo(1, true)) or 0) .. "/" ..  (select(3, GetTalentTabInfo(2, true)) or 0) .. "/" ..  (select(3, GetTalentTabInfo(3, true)) or 0)
 	
-	if( notifyTalents ) then
-		notifyTalents = nil
-		self:Print(name .. ": " .. RemembranceTalents[name])
+	if( ( notifyDifference and RemembranceTalents[name] ~= talent) or notifyTalents ) then
+		self:Print(name .. ": " .. talent)
 	end
+	
+	RemembranceTalents[name] = talent
+	
+	notifyDifference = nil
+	notifyTalents = nil
 end
 
 -- USE THIS INSTEAD OF CALLING THE SV TABLE
@@ -101,6 +110,38 @@ function Remembrance:ValidateUnit(unit)
 	end
 	
 	return nil
+end
+
+-- Deal with caching people
+function Remembrance:ScanUnit(unit)
+	-- Already have a request pending, exit quickly
+	if( select(2, IsInInstance()) ~= "arena" or requestSent or not UnitIsVisible(unit) or not UnitIsPlayer(unit) or not UnitIsEnemy("player", unit) ) then
+		return
+
+	end
+	
+
+	local name, server = UnitName(unit)
+	if( not server or server == "" ) then
+		server = GetRealmName()
+	end
+	
+	local fullName = name .. "-" .. server
+	
+	-- Only inspect them once per a season
+	if( alreadyQueued[fullName] ) then
+		return
+	end
+	
+	alreadyQueued[fullName] = true
+	
+	requestSent = true
+	notifyTalents = nil
+	notifyDifference = true
+	sentPlayerName = name
+	sentPlayerServer = server
+	
+	NotifyInspect(unit)
 end
 
 -- Inspect to show the entire tree
@@ -200,6 +241,15 @@ SlashCmdList["REMEMBRANCE"] = function(msg)
 		for server, total in pairs(servers) do
 			self:Echo(string.format(L["%s (%d)"], server, total))
 		end
+	
+	elseif( msg == "auto" ) then
+		RemembranceDB.autoInspect = not RemembranceDB.autoInspect
+		
+		if( RemembranceDB.autoInspect ) then
+			self:Print(L["Now auto inspecting enemies inside arenas."])
+		else
+			self:Print(L["No longer auto inspecting enemies inside arenas."])
+		end
 		
 	elseif( msg == "cancel" ) then
 		self:Print(L["Sync canceled, if you still have issues please do a /console reloadui. It'll usually take a few seconds for results to come back however from /reminspect."])
@@ -213,6 +263,7 @@ SlashCmdList["REMEMBRANCE"] = function(msg)
 		self:Echo(L["/reminspect <unit> - Gets quick talent information for a player, shows name, server and total points spent."])
 		self:Echo(L["/remembrance cancel - Cancels a sent /reminspect request (shouldn't need this)."])
 		self:Echo(L["/remembrance reset - Resets saved talent information"])
+		self:Echo(L["/remembrance auto - Toggles automatic inspection in arenas"])
 		self:Echo("")
 		self:Echo(L["Both /inspect and /reminspect work regardless of player faction, and range as long as they're within 100 yards. You still cannot get the gear of a player from an enemy faction however."])
 	end
@@ -222,6 +273,8 @@ end
 local frame = CreateFrame("Frame")
 frame:RegisterEvent("ADDON_LOADED")
 frame:RegisterEvent("INSPECT_TALENT_READY")
+frame:RegisterEvent("PLAYER_TARGET_CHANGED")
+frame:RegisterEvent("UPDATE_MOUSEOVER_UNIT")
 frame:SetScript("OnEvent", function(self, event, addon)
 	if( event == "ADDON_LOADED" and addon == "Remembrance" ) then
 		-- Load our hook if the InspectUI was already loaded by another addon
@@ -235,6 +288,10 @@ frame:SetScript("OnEvent", function(self, event, addon)
 			RemembranceTalents = {}
 		end
 		
+		-- DB
+		if( not RemembranceDB ) then
+			RemembranceDB = { autoInspect = true }
+		end
 
 	-- Inspect loaded, load our hook
 	elseif( event == "ADDON_LOADED" and addon == "Blizzard_InspectUI" ) then
@@ -244,5 +301,9 @@ frame:SetScript("OnEvent", function(self, event, addon)
 	-- Talents loaded
 	elseif( event == "INSPECT_TALENT_READY" ) then
 		Remembrance.INSPECT_TALENT_READY(Remembrance)
+	elseif( event == "PLAYER_TARGET_CHANGED" and RemembranceDB.autoInspect ) then
+		Remembrance:ScanUnit("target")
+	elseif( event == "UPDATE_MOUSEOVER_UNIT" and RemembranceDB.autoInspect ) then
+		Remembrance:ScanUnit("mouseover")
 	end
 end)

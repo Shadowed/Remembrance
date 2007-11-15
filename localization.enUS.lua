@@ -9,8 +9,12 @@ RemembranceLocals = {
 	["/remembrance cancel - Cancels a sent /reminspect request (shouldn't need this)."] = "/remembrance cancel - Cancels a sent /reminspect request (shouldn't need this).",
 	["/remembrance reset - Resets saved talent information"] = "/remembrance reset - Resets saved talent information",
 	["/remembrance info - Shows information regarding classes saved"] = "/remembrance info - Shows information regarding classes saved",
-	
+	["/remembrance auto - Toggles automatic inspection in arenas"] = "/remembrance auto - Toggles automatic inspection in arenas",
+		
 	["Both /inspect and /reminspect work regardless of player faction, and range as long as they're within 100 yards. You still cannot get the gear of a player from an enemy faction however."] = "Both /inspect and /reminspect work regardless of player faction, and range as long as they're within 100 yards. You still cannot get the gear of a player from an enemy faction however.",
+	
+	["Now auto inspecting enemies inside arenas."] = "Now auto inspecting enemies inside arenas.",
+	["No longer auto inspecting enemies inside arenas."] = "No longer auto inspecting enemies inside arenas.",
 	
 	["Sync canceled, if you still have issues please do a /console reloadui. It'll usually take a few seconds for results to come back however from /reminspect."] = "Sync canceled, if you still have issues please do a /console reloadui. It'll usually take a few seconds for results to come back however from /reminspect.",
 	["All saved data has been reset"] = "All saved data has been reset",

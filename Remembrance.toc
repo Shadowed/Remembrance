@@ -3,7 +3,7 @@
 ## Notes: Saves and shows players talents
 ## Version: $Revision: 322 $
 ## Author: Mayen
-## SavedVariables: RemembranceTalents
+## SavedVariables: RemembranceTalents, RemembranceDB
 
 localization.enUS.lua
 localization.frFR.lua
