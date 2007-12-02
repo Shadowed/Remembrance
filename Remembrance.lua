@@ -6,6 +6,7 @@ local notifyTalents
 local notifyDifference
 local sentPlayerServer
 local sentPlayerName
+local sentPlayerClass
 local requestSent
 
 local inspectQueue = {}
@@ -25,10 +26,11 @@ function Remembrance:INSPECT_TALENT_READY()
 
 	-- Request sent through Remembrance
 	if( sentPlayerName and sentPlayerServer ) then
-		self:SaveTalentInfo(sentPlayerName, sentPlayerServer)
+		self:SaveTalentInfo(sentPlayerName, sentPlayerServer, sentPlayerClass)
 		
 		sentPlayerName = nil
 		sentPlayerServer = nil
+		sentPlayerClass = nil
 	
 	-- Request sent through Blizzards inspect frame
 	elseif( InspectFrame and InspectFrame.unit ) then
@@ -37,7 +39,7 @@ function Remembrance:INSPECT_TALENT_READY()
 			server = GetRealmName()
 		end
 
-		self:SaveTalentInfo(name, server)
+		self:SaveTalentInfo(name, server, (UnitClass(InspectFrame.unit)))
 	end
 
 	-- Now enable the tab
@@ -47,12 +49,12 @@ function Remembrance:INSPECT_TALENT_READY()
 end
 
 -- Save the information by name/server
-function Remembrance:SaveTalentInfo(name, server)
+function Remembrance:SaveTalentInfo(name, server, class)
 	name = name .. "-" .. server
 	local talent = (select(3, GetTalentTabInfo(1, true)) or 0) .. "/" ..  (select(3, GetTalentTabInfo(2, true)) or 0) .. "/" ..  (select(3, GetTalentTabInfo(3, true)) or 0)
 	
 	if( ( notifyDifference and RemembranceTalents[name] ~= talent) or notifyTalents ) then
-		self:Print(name .. ": " .. talent)
+		self:Print(name .. " (" .. class .. "): " .. talent)
 	end
 	
 	RemembranceTalents[name] = talent
@@ -78,6 +80,7 @@ function Remembrance:InspectFrame_Show()
 	notifyTalents = nil
 	sentPlayerName = nil
 	sentPlayerServer = nil
+	sentPlayerClass = nil
 	
 	PanelTemplates_DisableTab(InspectFrame, 3)
 end
@@ -140,6 +143,7 @@ function Remembrance:ScanUnit(unit)
 	notifyDifference = true
 	sentPlayerName = name
 	sentPlayerServer = server
+	sentPlayerClass = (UnitClass(unit))
 	
 	NotifyInspect(unit)
 end
@@ -156,7 +160,7 @@ SlashCmdList["REMINSPECT"] = function(unit)
 		end
 
 		if( not Remembrance:ValidateUnit(unit) ) then
-			Remembrance:Print(string.format(L["Invalid unit \"%s\" entered, required player, target, focus, mouseover, party1-4, raid1-40"], unit))
+			Remembrance:Print(string.format(L["Invalid unit id \"%s\" entered, required player, target, focus, mouseover, party1-4, raid1-40"], unit))
 			return
 		end		
 	
@@ -192,7 +196,7 @@ SlashCmdList["REMQUICKIN"] = function(unit)
 
 	-- Validate it
 	if( not self:ValidateUnit(unit) ) then
-		self:Print(string.format(L["Invalid unit \"%s\" entered, required player, target, focus, mouseover, party1-4, raid1-40"], unit))
+		self:Print(string.format(L["Invalid unit id \"%s\" entered, required player, target, focus, mouseover, party1-4, raid1-40"], unit))
 		return
 	end
 
@@ -207,11 +211,12 @@ SlashCmdList["REMQUICKIN"] = function(unit)
 	notifyTalents = true
 
 	-- Since we can't rely on the unit id being the same by the time it arrives
+	sentPlayerClass = (UnitClass(unit))
 	sentPlayerName, sentPlayerServer = UnitName(unit)
 	if( not sentPlayerServer or sentPlayerServer == "" ) then
 		sentPlayerServer = GetRealmName()
 	end
-
+	
 	-- Send it off
 	NotifyInspect(unit)
 end
