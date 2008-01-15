@@ -104,15 +104,17 @@ function Remembrance:SaveTalentInfo(name, server, class)
 	else
 		self:Print(string.format("%s (%s): %s", name, class, talent))
 	end
-
+	
+	-- SSAF support for showing talents even after we've added them to the frame
+	if( inspectData.type == "auto" and SSAF and SSAF.UpdateTalentDisplay ) then
+		SSAF:UpdateTalentDisplay()
+	end
 end
 
 -- USE THIS INSTEAD OF CALLING THE SV TABLE
 function Remembrance:GetTalents(name, server)
 	-- Bad data passed
-
 	if( not name or not server ) then
-
 		return
 	end
 	
