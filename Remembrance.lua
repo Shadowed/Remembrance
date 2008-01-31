@@ -42,8 +42,6 @@ function Remembrance:OnEnable()
 	if( RemembranceDB.auto ) then
 		self:RegisterEvent("ZONE_CHANGED_NEW_AREA")
 		self:RegisterEvent("UPDATE_BATTLEFIELD_STATUS", "ZONE_CHANGED_NEW_AREA")
-
-		self:ZONE_CHANGED_NEW_AREA()
 	end
 end
 
@@ -170,7 +168,7 @@ function Remembrance:ZONE_CHANGED_NEW_AREA()
 		self:RegisterEvent("UPDATE_MOUSEOVER_UNIT")
 		self:RegisterEvent("PLAYER_TARGET_CHANGED")
 		self:RegisterEvent("PLAYER_FOCUS_CHANGED")
-		
+				
 	-- Was in an arena, but left it
 	elseif( type ~= "arena" and instanceType == "arena" ) then
 		self:UnregisterEvent("UPDATE_MOUSEOVER_UNIT")
@@ -178,8 +176,8 @@ function Remembrance:ZONE_CHANGED_NEW_AREA()
 		self:UnregisterEvent("PLAYER_FOCUS_CHANGED")
 		
 		-- Wipe our already inspected DB
-		for i=#(alreadyInspected), 1, -1 do
-			table.remove(alreadyInspected, i)
+		for k in pairs(alreadyInspected) do
+			alreadyInspected[k] = nil
 		end
 	end
 	
