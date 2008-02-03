@@ -1,5 +1,5 @@
---[[ $Id: AceEvent-3.0.lua 56939 2007-12-13 20:03:55Z nevcairiel $ ]]
-local MAJOR, MINOR = "AceEvent-3.0", 2
+--[[ $Id: AceEvent-3.0.lua 60131 2008-02-03 13:03:56Z nevcairiel $ ]]
+local MAJOR, MINOR = "AceEvent-3.0", 3
 local AceEvent = LibStub:NewLibrary(MAJOR, MINOR)
 
 if not AceEvent then return end

@@ -1,5 +1,5 @@
---[[ $Id: CallbackHandler-1.0.lua 56953 2007-12-14 01:39:59Z nevcairiel $ ]]
-local MAJOR, MINOR = "CallbackHandler-1.0", 1
+--[[ $Id: CallbackHandler-1.0.lua 60131 2008-02-03 13:03:56Z nevcairiel $ ]]
+local MAJOR, MINOR = "CallbackHandler-1.0", 2
 local CallbackHandler = LibStub:NewLibrary(MAJOR, MINOR)
 
 if not CallbackHandler then return end -- No upgrade needed
@@ -95,7 +95,12 @@ function CallbackHandler:New(target, RegisterName, UnregisterName, UnregisterAll
 			-- Something in one of our callbacks wanted to register more callbacks; they got queued
 			for eventname,callbacks in pairs(registry.insertQueue) do
 				for self,func in pairs(callbacks) do
+					local first = not rawget(events, eventname) or not next(events[eventname])	-- test for empty before. not test for one member after. that one member may have been overwritten.
 					events[eventname][self] = func
+					-- fire OnUsed callback?
+					if first and registry.OnUsed then
+						registry.OnUsed(registry, target, eventname)
+					end
 				end
 			end
 			registry.insertQueue = nil
@@ -157,18 +162,16 @@ function CallbackHandler:New(target, RegisterName, UnregisterName, UnregisterAll
 		-- if registry.recurse<1 then
 			-- we're overwriting an existing entry, or not currently recursing. just set it.
 			events[eventname][self] = regfunc
+			-- fire OnUsed callback?
+			if registry.OnUsed and first then
+				registry.OnUsed(registry, target, eventname)
+			end
 		else
 			-- we're currently processing a callback in this registry, so delay the registration of this new entry!
 			-- yes, we're a bit wasteful on garbage, but this is a fringe case, so we're picking low implementation overhead over garbage efficiency
 			registry.insertQueue = registry.insertQueue or setmetatable({},meta)
 			registry.insertQueue[eventname][self] = regfunc
 		end
-
-		-- fire OnUsed callback?
-		if registry.OnUsed and first then
-			registry.OnUsed(registry, target, eventname)
-		end
-
 	end
 
 	-- Unregister a callback
