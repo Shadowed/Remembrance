@@ -11,6 +11,7 @@ RemembranceLocals = {
 	["/remembrance info - Shows information regarding classes saved"] = "/remembrance info - Shows information regarding classes saved",
 	["/remembrance auto - Toggles automatic inspection in arenas"] = "/remembrance auto - Toggles automatic inspection in arenas",
 	["/remembrance tree - Toggles showing full tree names instead of simply ##/##/##"] = "/remembrance tree - Toggles showing full tree names instead of simply ##/##/##",
+	["/remembrance aggressive - Toggles more aggressive enemy inspection through party targets."] = "/remembrance aggressive - Toggles more aggressive enemy inspection through party targets.",
 	
 	["Unknown"] = "Unknown",
 	
@@ -23,6 +24,9 @@ RemembranceLocals = {
 	["Now auto inspecting enemies inside arenas."] = "Now auto inspecting enemies inside arenas.",
 	["No longer auto inspecting enemies inside arenas."] = "No longer auto inspecting enemies inside arenas.",
 	
+	["No longer using aggressive auto inspection."] = "No longer using aggressive auto inspection.",
+	["Now using aggressive auto inspection."] = "Now using aggressive auto inspection.",
+
 	["Sync canceled, if you still have issues please do a /console reloadui. It'll usually take a few seconds for results to come back however from /reminspect."] = "Sync canceled, if you still have issues please do a /console reloadui. It'll usually take a few seconds for results to come back however from /reminspect.",
 	
 	["Failed to load Blizzard_InspectUI."] = "Failed to load Blizzard_InspectUI.",

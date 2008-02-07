@@ -6,7 +6,10 @@ local Orig_CanInspect
 
 local instanceType
 local alreadyInspected = {}
-local inspectData = {}
+local maxArenaPlayers = 0
+local totalInspected = 0
+local inspectData = {timeOut = 0}
+local raidMap = {}
 
 function Remembrance:OnInitialize()
 	-- Talent DB
@@ -25,6 +28,7 @@ function Remembrance:OnInitialize()
 		RemembranceDB = {
 			auto = true,
 			tree = false,
+			aggressive = false,
 		}
 	end
 	
@@ -32,21 +36,56 @@ function Remembrance:OnInitialize()
 	if( IsAddOnLoaded("Blizzard_InspectUI") ) then
 		self:HookInspect()
 	end
+	
+	-- So we don't have to concate 50 times
+	for i=1, MAX_RAID_MEMBERS do
+		raidMap[i] = "raid" .. i .. "target"
+	end
 end
 
 function Remembrance:OnEnable()
 	self:RegisterEvent("ADDON_LOADED")
 	self:RegisterEvent("INSPECT_TALENT_READY")
-	
 
 	if( RemembranceDB.auto ) then
 		self:RegisterEvent("ZONE_CHANGED_NEW_AREA")
 		self:RegisterEvent("UPDATE_BATTLEFIELD_STATUS", "ZONE_CHANGED_NEW_AREA")
+		
+		if( RemembranceDB.aggressive ) then
+			if( not self.scanFrame ) then
+				local timeElapsed = 0
+				
+				self.scanFrame = CreateFrame("Frame")
+				self.scanFrame:SetScript("OnUpdate", function(self, elapsed)
+					timeElapsed = timeElapsed + elapsed
+					
+					if( timeElapsed >= 0.50 ) then
+						timeElapsed = 0
+						
+						for i=1, GetNumRaidMembers() do
+							local unit = raidMap[i]
+							if( UnitExists(unit) ) then
+								local name = UnitName(unit)
+								if( name and not alreadyInspected[name] ) then
+									Remembrance:ScanUnit(unit)
+								end
+							end
+						end
+					end
+				end)
+			else
+				self.scanFrame:Show()
+			end
+		end
 	end
 end
 
 function Remembrance:OnDisable()
 	self:UnregisterAllEvents()
+
+	if( self.scanFrame ) then
+		self.scanFrame:Hide()
+	end
 end
 
 function Remembrance:INSPECT_TALENT_READY()
@@ -59,7 +98,6 @@ function Remembrance:INSPECT_TALENT_READY()
 		
 		self:SaveTalentInfo(name, server, (UnitClass(InspectFrame.unit)))
 	
-
 	-- Manually sent through /rem, or it's an auto inspect
 	elseif( inspectData.type == "manual" or inspectData.type == "auto" ) then
 		self:SaveTalentInfo(inspectData.name, inspectData.server, inspectData.class)
@@ -161,7 +199,18 @@ function Remembrance:ADDON_LOADED(event, addon)
 end
 
 -- For doing auto inspection inside arenas
-function Remembrance:ZONE_CHANGED_NEW_AREA()
+function Remembrance:ZONE_CHANGED_NEW_AREA(event)
+	if( event == "UPDATE_BATTLEFIELD_STATUS" ) then
+		-- Figure out how many people we're supposed to scan
+		for i=1, MAX_BATTLEFIELD_QUEUES do
+			local status, _, _, _, _, teamSize, isRegistered = GetBattlefieldStatus(i)
+			if( status == "active" and teamSize > 0 ) then
+				maxArenaPlayers = teamSize
+				break
+			end
+		end
+	end
+
 	local type = select(2, IsInInstance())
 	-- Inside an arena, but wasn't already
 	if( type == "arena" and type ~= instanceType ) then
@@ -179,18 +228,21 @@ function Remembrance:ZONE_CHANGED_NEW_AREA()
 		for k in pairs(alreadyInspected) do
 			alreadyInspected[k] = nil
 		end
+		
+		maxArenaPlayers = 0
+		totalInspected = 0
 	end
 	
 	instanceType = type
 end
 
 function Remembrance:ScanUnit(unit)
-	if( inspectData.sent or not UnitIsVisible(unit) or not UnitIsPlayer(unit) or not UnitIsEnemy("player", unit) ) then
+	if( ( inspectData.sent and inspectData.timeOut < GetTime() ) or not UnitIsVisible(unit) or not UnitIsPlayer(unit) or not UnitIsEnemy("player", unit) ) then
 		return
 	end
 	
 	local name, server = UnitName(unit)
-
+	
 	-- Already inspected them, don't bother again
 	if( alreadyInspected[name] ) then
 		return
@@ -201,12 +253,27 @@ function Remembrance:ScanUnit(unit)
 	end
 	
 	alreadyInspected[name] = true
+	totalInspected = totalInspected + 1
+		
+	-- Check if we've inspected everyone in this match, if so then stop scanning
+	--[[
+	if( totalInspected >= maxArenaPlayers ) then
+		self:UnregisterEvent("UPDATE_MOUSEOVER_UNIT")
+		self:UnregisterEvent("PLAYER_TARGET_CHANGED")
+		self:UnregisterEvent("PLAYER_FOCUS_CHANGED")
+		
+		if( self.scanFrame ) then
+			self.scanFrame:Hide()
+		end
+	end
+	]]
 
 	inspectData.sent = true
 	inspectData.type = "auto"
 	inspectData.name = name
 	inspectData.server = server
 	inspectData.class = UnitClass(unit)
+	inspectData.timeOut = GetTime() + 3
 	
 	NotifyInspect(unit)
 end
@@ -274,7 +341,7 @@ SlashCmdList["REMQUICKIN"] = function(unit)
 	local self = Remembrance
 	
 	-- Can only send one request at a time
-	if( inspectData.sent ) then
+	if( inspectData.sent and inspectData.timeOut < GetTime() ) then
 		if( inspectData.name and inspectData.server ) then
 			self:Print(string.format(L["Request has already been sent for %s of %s, please wait for it to finish."], inspectData.name, inspectData.server))
 		else
@@ -311,6 +378,7 @@ SlashCmdList["REMQUICKIN"] = function(unit)
 	inspectData.class = (UnitClass(unit))
 	inspectData.name = name
 	inspectData.server = server
+	inspectData.timeOut = GetTime() + 3
 	
 	-- Send it off
 	NotifyInspect(unit)
@@ -356,7 +424,19 @@ SlashCmdList["REMEMBRANCE"] = function(msg)
 		
 		self:OnDisable()
 		self:OnEnable()
+	
+	elseif( msg == "aggressive" ) then
+		RemembranceDB.aggressive = not RemembranceDB.aggressive
 		
+		if( RemembranceDB.aggressive ) then
+			self:Print(L["Now using aggressive auto inspection."])
+		else
+			self:Print(L["No longer using aggressive auto inspection."])
+		end
+		
+		self:OnDisable()
+		self:OnEnable()
+	
 	elseif( msg == "cancel" ) then
 		self:Print(L["Sync canceled, if you still have issues please do a /console reloadui. It'll usually take a few seconds for results to come back however from /reminspect."])
 
@@ -371,6 +451,7 @@ SlashCmdList["REMEMBRANCE"] = function(msg)
 		self:Echo(L["/remembrance tree - Toggles showing full tree names instead of simply ##/##/##"])
 		self:Echo(L["/remembrance auto - Toggles automatic inspection in arenas"])
 		self:Echo(L["/remembrance cancel - Cancels a sent /reminspect request (shouldn't need this)."])
+		self:Echo(L["/remembrance aggressive - Toggles more aggressive enemy inspection through party targets."])
 		self:Echo("")
 		self:Echo(L["Both /inspect and /reminspect work regardless of player faction, and range as long as they're within 100 yards. You still cannot get the gear of a player from an enemy faction however."])
 	end
