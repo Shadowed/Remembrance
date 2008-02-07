@@ -190,7 +190,7 @@ function Remembrance:HookInspect()
 		PanelTemplates_DisableTab(InspectFrame, 3)
 		
 		Orig_InspectFrame_Show(...)
-	end)
+	end
 end
 
 -- Inspect is LoD, so catch it here
