@@ -3,12 +3,13 @@ Remembrance = LibStub("AceAddon-3.0"):NewAddon("Remembrance", "AceEvent-3.0")
 local L = RemembranceLocals
 
 local Orig_CanInspect
+local Orig_InspectFrame_Show
 
 local instanceType
 local alreadyInspected = {}
 local maxArenaPlayers = 0
 local totalInspected = 0
-local inspectData = {timeOut = 0}
+local inspectData = {timeOut = 1000000000000}
 local raidMap = {}
 
 function Remembrance:OnInitialize()
@@ -104,7 +105,9 @@ function Remembrance:INSPECT_TALENT_READY()
 	end
 	
 	-- Reset
+	-- In a few million years, we're fucked
 	inspectData.sent = nil
+	inspectData.timeOut = 1000000000000
 	inspectData.name = nil
 	inspectData.type = nil
 	
@@ -163,15 +166,6 @@ function Remembrance:GetTalents(name, server)
 	return tonumber(tree1) or 0, tonumber(tree2) or 0, tonumber(tree3) or 0
 end
 
--- Inspection window was shown, reset data
-function Remembrance:InspectFrame_Show()
-	inspectData.sent = true
-	inspectData.name = nil
-	inspectData.type = "inspect"
-
-	PanelTemplates_DisableTab(InspectFrame, 3)
-end
-
 -- Hook the inspection frame being shown, and the validation checks
 function Remembrance:HookInspect()
 	if( Orig_CanInspect ) then
@@ -187,7 +181,16 @@ function Remembrance:HookInspect()
 		return Orig_CanInspect(unit, ...)
 	end
 
-	hooksecurefunc("InspectFrame_Show", self.InspectFrame_Show)
+	Orig_InspectFrame_Show = InspectFrame_Show
+	InspectFrame_Show = function(...)
+		inspectData.sent = true
+		inspectData.name = nil
+		inspectData.type = "inspect"
+
+		PanelTemplates_DisableTab(InspectFrame, 3)
+		
+		Orig_InspectFrame_Show(...)
+	end)
 end
 
 -- Inspect is LoD, so catch it here
