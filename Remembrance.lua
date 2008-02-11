@@ -129,7 +129,7 @@ function Remembrance:SaveTalentInfo(name, server, class)
 	RemembranceTalents[name] = talent
 	
 	-- /inspect don't bother outputting, but we still want to save
-	if( inspectData.type == "inspect" ) then
+	if( not inspectData.type or inspectData.type == "inspect" ) then
 		return
 	end
 	
