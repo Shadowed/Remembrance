@@ -5,42 +5,31 @@ local L = RemembranceLocals
 local Orig_CanInspect
 local Orig_InspectFrame_Show
 
+local DEEP_THRESHOLD = 30
+
 local instanceType
 local alreadyInspected = {}
-local maxArenaPlayers = 0
-local totalInspected = 0
 local inspectData = {timeOut = 1000000000000}
-local raidMap = {}
+local talentCallback = {}
 
 function Remembrance:OnInitialize()
-	-- Talent DB
 	if( not RemembranceTalents ) then
 		RemembranceTalents = {}	
 	end
 	
-	-- Check if we've upgraded
-	if( RemembranceDB and RemembranceDB.auto == nil ) then
-		RemembranceDB = nil
-		self:Print(L["Upgraded Remembrance DB, settings have been reset."])
+	if( not RemembranceTrees ) then
+		RemembranceTrees = {}
 	end
-
-	-- Config DB
+	
 	if( not RemembranceDB ) then
 		RemembranceDB = {
 			auto = true,
 			tree = false,
-			aggressive = false,
 		}
 	end
-	
-	-- Check if inspection is loaded by another addon
+
 	if( IsAddOnLoaded("Blizzard_InspectUI") ) then
 		self:HookInspect()
-	end
-	
-	-- So we don't have to concate 50 times
-	for i=1, MAX_RAID_MEMBERS do
-		raidMap[i] = "raid" .. i .. "target"
 	end
 end
 
@@ -50,43 +39,12 @@ function Remembrance:OnEnable()
 
 	if( RemembranceDB.auto ) then
 		self:RegisterEvent("ZONE_CHANGED_NEW_AREA")
-		self:RegisterEvent("UPDATE_BATTLEFIELD_STATUS", "ZONE_CHANGED_NEW_AREA")
-		
-		if( RemembranceDB.aggressive ) then
-			if( not self.scanFrame ) then
-				local timeElapsed = 0
-				
-				self.scanFrame = CreateFrame("Frame")
-				self.scanFrame:SetScript("OnUpdate", function(self, elapsed)
-					timeElapsed = timeElapsed + elapsed
-					
-					if( timeElapsed >= 0.50 ) then
-						timeElapsed = 0
-						
-						for i=1, GetNumRaidMembers() do
-							local unit = raidMap[i]
-							if( UnitExists(unit) ) then
-								local name = UnitName(unit)
-								if( name and not alreadyInspected[name] ) then
-									Remembrance:ScanUnit(unit)
-								end
-							end
-						end
-					end
-				end)
-			else
-				self.scanFrame:Show()
-			end
-		end
+		self:RegisterEvent("PLAYER_ENTERING_WORLD", "ZONE_CHANGED_NEW_AREA")
 	end
 end
 
 function Remembrance:OnDisable()
 	self:UnregisterAllEvents()
-
-	if( self.scanFrame ) then
-		self.scanFrame:Hide()
-	end
 end
 
 function Remembrance:INSPECT_TALENT_READY()
@@ -97,11 +55,11 @@ function Remembrance:INSPECT_TALENT_READY()
 			server = GetRealmName()
 		end
 		
-		self:SaveTalentInfo(name, server, (UnitClass(InspectFrame.unit)))
+		self:SaveTalentInfo(name, server, UnitClass(InspectFrame.unit))
 	
 	-- Manually sent through /rem, or it's an auto inspect
 	elseif( inspectData.type == "manual" or inspectData.type == "auto" ) then
-		self:SaveTalentInfo(inspectData.name, inspectData.server, inspectData.class)
+		self:SaveTalentInfo(inspectData.name, inspectData.server, inspectData.class, inspectData.classToken)
 	end
 	
 	-- Reset
@@ -117,53 +75,45 @@ function Remembrance:INSPECT_TALENT_READY()
 	end
 end
 
-function Remembrance:SaveTalentInfo(name, server, class)
+function Remembrance:SaveTalentInfo(name, server, class, classToken)
 	name = name .. "-" .. server
-	local talent = (select(3, GetTalentTabInfo(1, true)) or 0) .. "/" ..  (select(3, GetTalentTabInfo(2, true)) or 0) .. "/" ..  (select(3, GetTalentTabInfo(3, true)) or 0)
-	
-	-- Auto inspect + no change
-	if( inspectData.type == "auto" and ( RemembranceTalents[name] == talent ) ) then
+	local talent = (select(3, GetTalentTabInfo(1, true)) or 0) .. "/" ..  (select(3, GetTalentTabInfo(2, true)) or 0) .. "/" ..  (select(3, GetTalentTabInfo(3, true)) or 0) .. "/" .. classToken
+
+	-- Manual inspect through Blizzard, or an auto inspect with no data change
+	if( inspectData.type == "inspect" or ( inspectData.type == "auto" and ( RemembranceTalents[name] == talent ) ) ) then
+		RemembranceTalents[name] = talent
 		return
 	end
 
 	RemembranceTalents[name] = talent
 	
-	-- /inspect don't bother outputting, but we still want to save
-	if( not inspectData.type or inspectData.type == "inspect" ) then
-		return
+	local firstName, _, firstPoints = GetTalentTabInfo(1, true)
+	local secondName, _, secondPoints = GetTalentTabInfo(2, true)
+	local thirdName, _, thirdPoints = GetTalentTabInfo(3, true)
+	
+	if( not RemembranceTrees[classToken] ) then
+		RemembranceTrees[classToken] = {}
 	end
 	
+	RemembranceTrees[classToken][1] = firstName
+	RemembranceTrees[classToken][2] = secondName
+	RemembranceTrees[classToken][3] = thirdName
+
 	-- Output the full trees
 	if( RemembranceDB.tree ) then
-		local firstName, _, firstPoints = GetTalentTabInfo(1, true)
-		local secondName, _, secondPoints = GetTalentTabInfo(2, true)
-		local thirdName, _, thirdPoints = GetTalentTabInfo(3, true)
-		
 		self:Print(string.format("%s (%s): %s (%d), %s (%d), %s (%d)", name, class, firstName or L["Unknown"], firstPoints or 0, secondName or L["Unknown"], secondPoints or 0, thirdName or L["Unknown"], thirdPoints or 0))
 	else
-		self:Print(string.format("%s (%s): %s", name, class, talent))
+		self:Print(string.format("%s (%s): %d/%d/%d", name, class, firstPoints, secondPoints, thirdPoints))
 	end
 	
-	-- SSAF support for showing talents even after we've added them to the frame
-	if( inspectData.type == "auto" and SSAF and SSAF.UpdateTalentDisplay ) then
-		SSAF:UpdateTalentDisplay()
+	-- Callback support for other addons that want notification when a request goes through
+	for func, handler in pairs(talentCallback) do
+		if( type(func) == "string" ) then
+			handler[func](handler, inspectData.type, name, firstName, firstPoints, secondName, secondPoints, thirdName, thirdPoints)
+		else
+			func(inspectData.type, name, firstName, firstPoints, secondName, secondPoints, thirdName, thirdPoints)
+		end
 	end
-end
-
--- USE THIS INSTEAD OF CALLING THE SV TABLE
-function Remembrance:GetTalents(name, server)
-	-- Bad data passed
-	if( not name or not server ) then
-		return
-	end
-	
-	name = name .. "-" .. server
-	if( not RemembranceTalents[name] ) then
-		return nil
-	end
-	
-	local tree1, tree2, tree3 = string.split("/", RemembranceTalents[name])
-	return tonumber(tree1) or 0, tonumber(tree2) or 0, tonumber(tree3) or 0
 end
 
 -- Hook the inspection frame being shown, and the validation checks
@@ -203,17 +153,6 @@ end
 
 -- For doing auto inspection inside arenas
 function Remembrance:ZONE_CHANGED_NEW_AREA(event)
-	if( event == "UPDATE_BATTLEFIELD_STATUS" ) then
-		-- Figure out how many people we're supposed to scan
-		for i=1, MAX_BATTLEFIELD_QUEUES do
-			local status, _, _, _, _, teamSize, isRegistered = GetBattlefieldStatus(i)
-			if( status == "active" and teamSize > 0 ) then
-				maxArenaPlayers = teamSize
-				break
-			end
-		end
-	end
-
 	local type = select(2, IsInInstance())
 	-- Inside an arena, but wasn't already
 	if( type == "arena" and type ~= instanceType ) then
@@ -231,9 +170,6 @@ function Remembrance:ZONE_CHANGED_NEW_AREA(event)
 		for k in pairs(alreadyInspected) do
 			alreadyInspected[k] = nil
 		end
-		
-		maxArenaPlayers = 0
-		totalInspected = 0
 	end
 	
 	instanceType = type
@@ -256,26 +192,15 @@ function Remembrance:ScanUnit(unit)
 	end
 	
 	alreadyInspected[name] = true
-	totalInspected = totalInspected + 1
-		
-	-- Check if we've inspected everyone in this match, if so then stop scanning
-	--[[
-	if( totalInspected >= maxArenaPlayers ) then
-		self:UnregisterEvent("UPDATE_MOUSEOVER_UNIT")
-		self:UnregisterEvent("PLAYER_TARGET_CHANGED")
-		self:UnregisterEvent("PLAYER_FOCUS_CHANGED")
-		
-		if( self.scanFrame ) then
-			self.scanFrame:Hide()
-		end
-	end
-	]]
-
+	
+	local class, classToken = UnitClass(unit)
+	
 	inspectData.sent = true
 	inspectData.type = "auto"
 	inspectData.name = name
 	inspectData.server = server
-	inspectData.class = UnitClass(unit)
+	inspectData.class = class
+	inspectData.classToken = classToken
 	inspectData.timeOut = GetTime() + 3
 	
 	NotifyInspect(unit)
@@ -301,6 +226,98 @@ end
 
 function Remembrance:Echo(msg)
 	DEFAULT_CHAT_FRAME:AddMessage(msg)
+end
+
+-- PUBLIC APIS
+-- Get talent data on a person
+function Remembrance:GetTalents(name, server)
+	-- Bad data passed
+	if( not name ) then
+		return
+	elseif( server ) then
+		name = name .. "-" .. server
+	end
+	
+	if( not RemembranceTalents[name] ) then
+		return nil
+	end
+	
+	local tree1, tree2, tree3, classToken = string.split("/", RemembranceTalents[name])
+	return tonumber(tree1) or 0, tonumber(tree2) or 0, tonumber(tree3) or 0, classToken
+end
+
+function Remembrance:GetSpecName(name, server)
+	local tree1, tree2, tree3, classToken = self:GetTalents(name, server)
+	if( not classToken ) then
+		return tree1, tree2, tree3
+	elseif( tree1 == 0 and tree2 == 0 and tree3 == 0 ) then
+		return nil
+	end
+	
+	-- Make sure we've saved data for this class
+	local talentNames = RemembranceTrees[classToken]
+	if( not talentNames ) then
+		return tree1, tree2, tree3
+	end
+
+	-- Check for a hybrid spec
+	local deepTrees = 0
+	if( tree1 >= DEEP_THRESHOLD ) then
+		deepTrees = deepTrees + 1
+	end
+	if( tree2 >= DEEP_THRESHOLD ) then
+		deepTrees = deepTrees + 1
+	end
+	if( tree3 >= DEEP_THRESHOLD ) then
+		deepTrees = deepTrees + 1
+	end
+
+	if( deepTrees > 1 ) then
+		return L["Hybrid"]
+	end
+		
+	-- Now check specifics
+	if( tree1 > tree2 and tree1 > tree3 ) then
+		return talentNames[1]
+	elseif( tree2 > tree1 and tree2 > tree3 ) then
+		return talentNames[2]
+	elseif( tree3 > tree1 and tree3 > tree2 ) then
+		return talentNames[3]
+	end
+	
+	return L["Unknown"]
+end
+
+-- Allows you to send a request that Remembrance will pick up/save
+function Remembrance:InspectUnit(unit)
+	if( not UnitExists(unit) or not UnitIsPlayer(unit) ) then
+		return -2
+	elseif( inspectData.sent and inspectData.timeOut < Gettime() ) then
+		return -1
+	end
+
+	local class, classToken = UnitClass(unit)
+	
+	inspectData.sent = true
+	inspectData.type = "manual"
+	inspectData.name = name
+	inspectData.server = server
+	inspectData.class = class
+	inspectData.classToken = classToken
+	inspectData.timeOut = GetTime() + 3
+	
+	NotifyInspect(unit)
+	
+	return 1
+end
+
+-- Registering callback for auto inspect data
+function Remembrance:RegisterCallback(handler, func)
+	if( func ) then
+		talentCallback[func] = true
+	else
+		talentCallback[func] = handler
+	end
 end
 
 -- Slash command handling
@@ -376,11 +393,14 @@ SlashCmdList["REMQUICKIN"] = function(unit)
 		server = GetRealmName()
 	end
 
+	local class, classToken = UnitClass(unit)
+	
 	inspectData.sent = true
 	inspectData.type = "manual"
-	inspectData.class = (UnitClass(unit))
 	inspectData.name = name
 	inspectData.server = server
+	inspectData.class = class
+	inspectData.classToken = classToken
 	inspectData.timeOut = GetTime() + 3
 	
 	-- Send it off
@@ -427,19 +447,7 @@ SlashCmdList["REMEMBRANCE"] = function(msg)
 		
 		self:OnDisable()
 		self:OnEnable()
-	
-	elseif( msg == "aggressive" ) then
-		RemembranceDB.aggressive = not RemembranceDB.aggressive
 		
-		if( RemembranceDB.aggressive ) then
-			self:Print(L["Now using aggressive auto inspection."])
-		else
-			self:Print(L["No longer using aggressive auto inspection."])
-		end
-		
-		self:OnDisable()
-		self:OnEnable()
-	
 	elseif( msg == "cancel" ) then
 		self:Print(L["Sync canceled, if you still have issues please do a /console reloadui. It'll usually take a few seconds for results to come back however from /reminspect."])
 
@@ -454,7 +462,6 @@ SlashCmdList["REMEMBRANCE"] = function(msg)
 		self:Echo(L["/remembrance tree - Toggles showing full tree names instead of simply ##/##/##"])
 		self:Echo(L["/remembrance auto - Toggles automatic inspection in arenas"])
 		self:Echo(L["/remembrance cancel - Cancels a sent /reminspect request (shouldn't need this)."])
-		self:Echo(L["/remembrance aggressive - Toggles more aggressive enemy inspection through party targets."])
 		self:Echo("")
 		self:Echo(L["Both /inspect and /reminspect work regardless of player faction, and range as long as they're within 100 yards. You still cannot get the gear of a player from an enemy faction however."])
 	end

@@ -3,7 +3,7 @@
 ## Notes: Saves and shows players talents
 ## Version: $Revision: 322 $
 ## Author: Mayen
-## SavedVariables: RemembranceTalents, RemembranceDB
+## SavedVariables: RemembranceTalents, RemembranceDB, RemembranceTrees
 ## OptionalDeps: OptionHouse, HousingAuthority
 
 libs\LibStub-1.0\LibStub-1.0.xml
