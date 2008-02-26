@@ -229,7 +229,10 @@ function Remembrance:Echo(msg)
 end
 
 -- PUBLIC APIS
--- Get talent data on a person
+--[[
+	:GetTalents(name, server) - Returns the talents of a person if possible
+	Returns: tree1 (int), tree2 (int), tree3 (int)
+]]
 function Remembrance:GetTalents(name, server)
 	-- Bad data passed
 	if( not name ) then
@@ -246,10 +249,14 @@ function Remembrance:GetTalents(name, server)
 	return tonumber(tree1) or 0, tonumber(tree2) or 0, tonumber(tree3) or 0, classToken
 end
 
+--[[
+	:GetSpecName(name, server) - Returns the tree the person has the most points in, will return "Hybrid" if more then one tree has 30 points in it
+	Returns: Tree name if possible, or ##/##/## if not
+]]
 function Remembrance:GetSpecName(name, server)
 	local tree1, tree2, tree3, classToken = self:GetTalents(name, server)
 	if( not classToken ) then
-		return tree1, tree2, tree3
+		return string.format("%d/%d/%d", tree1, tree2, tree3)
 	elseif( tree1 == 0 and tree2 == 0 and tree3 == 0 ) then
 		return nil
 	end
@@ -257,7 +264,7 @@ function Remembrance:GetSpecName(name, server)
 	-- Make sure we've saved data for this class
 	local talentNames = RemembranceTrees[classToken]
 	if( not talentNames ) then
-		return tree1, tree2, tree3
+		return string.format("%d/%d/%d", tree1, tree2, tree3)
 	end
 
 	-- Check for a hybrid spec
@@ -288,7 +295,10 @@ function Remembrance:GetSpecName(name, server)
 	return L["Unknown"]
 end
 
--- Allows you to send a request that Remembrance will pick up/save
+--[[
+	:InspectUnit(unit) - Sends an inspect request if possible through Remembrance
+	Returns: 1 if the request was sent, -1 if a request is being processed still, -2 is it's a bad unit
+]]
 function Remembrance:InspectUnit(unit)
 	if( not UnitExists(unit) or not UnitIsPlayer(unit) ) then
 		return -2
