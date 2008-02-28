@@ -76,16 +76,16 @@ function Remembrance:INSPECT_TALENT_READY()
 end
 
 function Remembrance:SaveTalentInfo(name, server, class, classToken)
-	name = name .. "-" .. server
+	local fullName = name .. "-" .. server
 	local talent = (select(3, GetTalentTabInfo(1, true)) or 0) .. "/" ..  (select(3, GetTalentTabInfo(2, true)) or 0) .. "/" ..  (select(3, GetTalentTabInfo(3, true)) or 0) .. "/" .. classToken
 
 	-- Manual inspect through Blizzard, or an auto inspect with no data change
-	if( inspectData.type == "inspect" or ( inspectData.type == "auto" and ( RemembranceTalents[name] == talent ) ) ) then
-		RemembranceTalents[name] = talent
+	if( inspectData.type == "inspect" or ( inspectData.type == "auto" and ( RemembranceTalents[fullName] == talent ) ) ) then
+		RemembranceTalents[fullName] = talent
 		return
 	end
 
-	RemembranceTalents[name] = talent
+	RemembranceTalents[fullName] = talent
 	
 	local firstName, _, firstPoints = GetTalentTabInfo(1, true)
 	local secondName, _, secondPoints = GetTalentTabInfo(2, true)
@@ -101,17 +101,17 @@ function Remembrance:SaveTalentInfo(name, server, class, classToken)
 
 	-- Output the full trees
 	if( RemembranceDB.tree ) then
-		self:Print(string.format("%s (%s): %s (%d), %s (%d), %s (%d)", name, class, firstName or L["Unknown"], firstPoints or 0, secondName or L["Unknown"], secondPoints or 0, thirdName or L["Unknown"], thirdPoints or 0))
+		self:Print(string.format("%s (%s): %s (%d), %s (%d), %s (%d)", fullName, class, firstName or L["Unknown"], firstPoints or 0, secondName or L["Unknown"], secondPoints or 0, thirdName or L["Unknown"], thirdPoints or 0))
 	else
-		self:Print(string.format("%s (%s): %d/%d/%d", name, class, firstPoints, secondPoints, thirdPoints))
+		self:Print(string.format("%s (%s): %d/%d/%d", fullName, class, firstPoints, secondPoints, thirdPoints))
 	end
 	
 	-- Callback support for other addons that want notification when a request goes through
 	for func, handler in pairs(talentCallback) do
 		if( type(func) == "string" ) then
-			handler[func](handler, inspectData.type, name, firstName, firstPoints, secondName, secondPoints, thirdName, thirdPoints)
+			handler[func](handler, inspectData.type, name, server, firstName, firstPoints, secondName, secondPoints, thirdName, thirdPoints)
 		else
-			func(inspectData.type, name, firstName, firstPoints, secondName, secondPoints, thirdName, thirdPoints)
+			func(inspectData.type, name, server, firstName, firstPoints, secondName, secondPoints, thirdName, thirdPoints)
 		end
 	end
 end
@@ -321,7 +321,21 @@ function Remembrance:InspectUnit(unit)
 	return 1
 end
 
--- Registering callback for auto inspect data
+--[[
+	:RegisterCallback(handler[, func]) - Registers a function to be called when new talent data is found
+	
+	If you pass a second argument, it's assumed that the first one is a handler, functions will be called like
+	
+	HANDLER:
+	handler[func](handler, inspectType, name, server, firstTree, firstPoints, secondTree, secondPoints, thirdTree, thirdPoints)
+	
+	NO HANDLER:
+	func(inspectType, name, server, firstTree, firstPoints, secondTree, secondPoints, thirdTree, thirdPoints)
+	
+	name will be formatted as name-server, regardless if they're from your server or not.
+	inspectType can be manual (/remin or :InspectUnit), auto (Auto inspect in arenas), inspect (Inspected through Blizzards UI)
+	
+]]
 function Remembrance:RegisterCallback(handler, func)
 	if( func ) then
 		talentCallback[func] = true
