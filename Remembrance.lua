@@ -108,8 +108,10 @@ function Remembrance:SaveTalentInfo(name, server, class, classToken)
 	
 	-- Callback support for other addons that want notification when a request goes through
 	for func, handler in pairs(talentCallback) do
-		if( type(func) == "string" ) then
+		if( type(handler) == "table" ) then
 			handler[func](handler, inspectData.type, name, server, firstName, firstPoints, secondName, secondPoints, thirdName, thirdPoints)
+		elseif( type(func) == "string" ) then
+			getglobal(func)(inspectData.type, name, server, firstName, firstPoints, secondName, secondPoints, thirdName, thirdPoints)
 		else
 			func(inspectData.type, name, server, firstName, firstPoints, secondName, secondPoints, thirdName, thirdPoints)
 		end
@@ -250,13 +252,18 @@ function Remembrance:GetTalents(name, server)
 end
 
 --[[
-	:GetSpecName(name, server) - Returns the tree the person has the most points in, will return "Hybrid" if more then one tree has 30 points in it
+	:GetSpecName(name, server, showHybrid) - Returns the tree the person has the most points in, will return "Hybrid" if more then one tree has 30 points in it
 	Returns: Tree name if possible, or ##/##/## if not
 ]]
-function Remembrance:GetSpecName(name, server)
+function Remembrance:GetSpecName(name, server, showHybrid)
 	local tree1, tree2, tree3, classToken = self:GetTalents(name, server)
 	if( not classToken ) then
-		return string.format("%d/%d/%d", tree1, tree2, tree3)
+		if( tree1 and tree2 and tree3 ) then
+			return string.format("%d/%d/%d", tree1, tree2, tree3)
+		else
+			return nil
+		end
+		
 	elseif( tree1 == 0 and tree2 == 0 and tree3 == 0 ) then
 		return nil
 	end
@@ -267,20 +274,22 @@ function Remembrance:GetSpecName(name, server)
 		return string.format("%d/%d/%d", tree1, tree2, tree3)
 	end
 
-	-- Check for a hybrid spec
-	local deepTrees = 0
-	if( tree1 >= DEEP_THRESHOLD ) then
-		deepTrees = deepTrees + 1
-	end
-	if( tree2 >= DEEP_THRESHOLD ) then
-		deepTrees = deepTrees + 1
-	end
-	if( tree3 >= DEEP_THRESHOLD ) then
-		deepTrees = deepTrees + 1
-	end
+	if( showHybrid ) then
+		-- Check for a hybrid spec
+		local deepTrees = 0
+		if( tree1 >= DEEP_THRESHOLD ) then
+			deepTrees = deepTrees + 1
+		end
+		if( tree2 >= DEEP_THRESHOLD ) then
+			deepTrees = deepTrees + 1
+		end
+		if( tree3 >= DEEP_THRESHOLD ) then
+			deepTrees = deepTrees + 1
+		end
 
-	if( deepTrees > 1 ) then
-		return L["Hybrid"]
+		if( deepTrees > 1 ) then
+			return L["Hybrid"]
+		end
 	end
 		
 	-- Now check specifics
@@ -337,10 +346,10 @@ end
 	
 ]]
 function Remembrance:RegisterCallback(handler, func)
-	if( func ) then
-		talentCallback[func] = true
-	else
+	if( type(func) == "string" ) then
 		talentCallback[func] = handler
+	else
+		talentCallback[func] = true
 	end
 end
 
