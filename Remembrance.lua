@@ -47,15 +47,42 @@ function Remembrance:OnDisable()
 	self:UnregisterAllEvents()
 end
 
+-- Send off a inspect request
+local function sendInspectRequest(unit, type)
+	-- For some reason, we can't do NotifyInspect on the player
+
+	if( UnitIsUnit("player", unit) ) then
+
+		return
+	end
+	
+	local class, classToken = UnitClass(unit)
+	local name, server = UnitName(unit)
+	if( server == "" ) then
+		server = nil
+	end
+	
+	inspectData.sent = true
+	inspectData.type = type or "manual"
+	inspectData.name = name
+	inspectData.server = server or GetRealmName()
+	inspectData.class = class
+	inspectData.classToken = classToken
+	inspectData.timeOut = GetTime() + 3
+	
+	NotifyInspect(unit)
+end
+
 function Remembrance:INSPECT_TALENT_READY()
 	-- Sent through opening the inspection window
-	if( inspectData.type == "inspect" and InspectFrame.unit ) then
+	if( inspectData.type == "inspect" and InspectFrame.unit and not UnitIsUnit("player", unit) ) then
+		local class, classToken = UnitClass(inspectFrame.unit)
 		local name, server = UnitName(InspectFrame.unit)
 		if( not server or server == "" ) then
 			server = GetRealmName()
 		end
 		
-		self:SaveTalentInfo(name, server, UnitClass(InspectFrame.unit))
+		self:SaveTalentInfo(name, server, class, classToken)
 	
 	-- Manually sent through /rem, or it's an auto inspect
 	elseif( inspectData.type == "manual" or inspectData.type == "auto" ) then
@@ -76,16 +103,7 @@ function Remembrance:INSPECT_TALENT_READY()
 end
 
 function Remembrance:SaveTalentInfo(name, server, class, classToken)
-	local fullName = name .. "-" .. server
-	local talent = (select(3, GetTalentTabInfo(1, true)) or 0) .. "/" ..  (select(3, GetTalentTabInfo(2, true)) or 0) .. "/" ..  (select(3, GetTalentTabInfo(3, true)) or 0) .. "/" .. classToken
-
-	-- Manual inspect through Blizzard, or an auto inspect with no data change
-	if( inspectData.type == "inspect" or ( inspectData.type == "auto" and ( RemembranceTalents[fullName] == talent ) ) ) then
-		RemembranceTalents[fullName] = talent
-		return
-	end
-
-	RemembranceTalents[fullName] = talent
+	name = name .. "-" .. server
 	
 	local firstName, _, firstPoints = GetTalentTabInfo(1, true)
 	local secondName, _, secondPoints = GetTalentTabInfo(2, true)
@@ -99,21 +117,37 @@ function Remembrance:SaveTalentInfo(name, server, class, classToken)
 	RemembranceTrees[classToken][2] = secondName
 	RemembranceTrees[classToken][3] = thirdName
 
-	-- Output the full trees
-	if( RemembranceDB.tree ) then
-		self:Print(string.format("%s (%s): %s (%d), %s (%d), %s (%d)", fullName, class, firstName or L["Unknown"], firstPoints or 0, secondName or L["Unknown"], secondPoints or 0, thirdName or L["Unknown"], thirdPoints or 0))
-	else
-		self:Print(string.format("%s (%s): %d/%d/%d", fullName, class, firstPoints, secondPoints, thirdPoints))
+	-- Compress the entire tree into 63 char or so format, the same one used by Blizzards talent calculator
+	local compressedTree = ""
+	for tab=1, GetNumTalentTabs(true) do
+		for talent=1, GetNumTalents(tab, true) do
+			local name, path, tier, column, currentRank, maxRank = GetTalentInfo(tab, talent, true)
+			compressedTree = compressedTree .. (currentRank or 0)
+		end
+	end
+	
+	local talent = string.format("%d/%d/%d/%s/%s", firstPoints or 0, secondPoints or 0, thirdPoints or 0, classToken or "", compressedTree)
+	local oldTree = RemembranceTalents[name]
+
+	RemembranceTalents[name] = talent
+	
+	-- Output talent info
+	if( ( inspectData.type == "auto" and oldTree ~= talent ) or inspectData.type ~= "inspect" ) then
+		if( RemembranceDB.tree ) then
+			self:Print(string.format("%s (%s): %s (%d), %s (%d), %s (%d)", name, class, firstName or L["Unknown"], firstPoints or 0, secondName or L["Unknown"], secondPoints or 0, thirdName or L["Unknown"], thirdPoints or 0))
+		else
+			self:Print(string.format("%s (%s): %d/%d/%d", name, class, firstPoints, secondPoints, thirdPoints))
+		end
 	end
 	
 	-- Callback support for other addons that want notification when a request goes through
 	for func, handler in pairs(talentCallback) do
-		if( type(handler) == "table" ) then
-			handler[func](handler, inspectData.type, name, server, firstName, firstPoints, secondName, secondPoints, thirdName, thirdPoints)
-		elseif( type(func) == "string" ) then
-			getglobal(func)(inspectData.type, name, server, firstName, firstPoints, secondName, secondPoints, thirdName, thirdPoints)
+		if( type(handler) == "table" and type(func) == "string" ) then
+			handler[func](handler, inspectData.type, name, firstName, firstPoints, secondName, secondPoints, thirdName, thirdPoints)
+		elseif( handler == true and type(func) == "string" ) then
+			getglobal(func)(inspectData.type, name, firstName, firstPoints, secondName, secondPoints, thirdName, thirdPoints)
 		else
-			func(inspectData.type, name, server, firstName, firstPoints, secondName, secondPoints, thirdName, thirdPoints)
+			func(inspectData.type, name, firstName, firstPoints, secondName, secondPoints, thirdName, thirdPoints)
 		end
 	end
 end
@@ -194,18 +228,7 @@ function Remembrance:ScanUnit(unit)
 	end
 	
 	alreadyInspected[name] = true
-	
-	local class, classToken = UnitClass(unit)
-	
-	inspectData.sent = true
-	inspectData.type = "auto"
-	inspectData.name = name
-	inspectData.server = server
-	inspectData.class = class
-	inspectData.classToken = classToken
-	inspectData.timeOut = GetTime() + 3
-	
-	NotifyInspect(unit)
+	sendInspectRequest(unit, "auto")
 end
 
 -- For auto inspection
@@ -236,10 +259,7 @@ end
 	Returns: tree1 (int), tree2 (int), tree3 (int)
 ]]
 function Remembrance:GetTalents(name, server)
-	-- Bad data passed
-	if( not name ) then
-		return
-	elseif( server ) then
+	if( server ) then
 		name = name .. "-" .. server
 	end
 	
@@ -247,8 +267,8 @@ function Remembrance:GetTalents(name, server)
 		return nil
 	end
 	
-	local tree1, tree2, tree3, classToken = string.split("/", RemembranceTalents[name])
-	return tonumber(tree1) or 0, tonumber(tree2) or 0, tonumber(tree3) or 0, classToken
+	local tree1, tree2, tree3, classToken, rawTalents = string.split("/", RemembranceTalents[name])
+	return tonumber(tree1) or 0, tonumber(tree2) or 0, tonumber(tree3) or 0, classToken, rawTalents
 end
 
 --[[
@@ -257,15 +277,12 @@ end
 ]]
 function Remembrance:GetSpecName(name, server, showHybrid)
 	local tree1, tree2, tree3, classToken = self:GetTalents(name, server)
-	if( not classToken ) then
+	if( not tree1 or not classToken ) then
 		if( tree1 and tree2 and tree3 ) then
 			return string.format("%d/%d/%d", tree1, tree2, tree3)
 		else
 			return nil
 		end
-		
-	elseif( tree1 == 0 and tree2 == 0 and tree3 == 0 ) then
-		return nil
 	end
 	
 	-- Make sure we've saved data for this class
@@ -305,6 +322,24 @@ function Remembrance:GetSpecName(name, server, showHybrid)
 end
 
 --[[
+	:GetRawTalents(name, server) - Returns the raw unparsed talent format along with the classToken it's for, nil is no data is found
+	Returns: rawTalents (String), classToken (String)
+]]
+
+function Remembrance:GetRawTalents(name, server)
+	if( server ) then
+		name = name .. "-" .. serve
+	end
+	
+	local _, _, _, classToken, rawTalents = self:GetTalents(name)
+	if( not classToken or not rawTalents ) then
+		return nil
+	end
+	
+	return rawTalents, classToken
+end
+
+--[[
 	:InspectUnit(unit) - Sends an inspect request if possible through Remembrance
 	Returns: 1 if the request was sent, -1 if a request is being processed still, -2 is it's a bad unit
 ]]
@@ -315,38 +350,14 @@ function Remembrance:InspectUnit(unit)
 		return -1
 	end
 
-	local class, classToken = UnitClass(unit)
-	
-	inspectData.sent = true
-	inspectData.type = "manual"
-	inspectData.name = name
-	inspectData.server = server
-	inspectData.class = class
-	inspectData.classToken = classToken
-	inspectData.timeOut = GetTime() + 3
-	
-	NotifyInspect(unit)
+	sendInspectRequest(unit)
 	
 	return 1
 end
 
---[[
-	:RegisterCallback(handler[, func]) - Registers a function to be called when new talent data is found
-	
-	If you pass a second argument, it's assumed that the first one is a handler, functions will be called like
-	
-	HANDLER:
-	handler[func](handler, inspectType, name, server, firstTree, firstPoints, secondTree, secondPoints, thirdTree, thirdPoints)
-	
-	NO HANDLER:
-	func(inspectType, name, server, firstTree, firstPoints, secondTree, secondPoints, thirdTree, thirdPoints)
-	
-	name will be formatted as name-server, regardless if they're from your server or not.
-	inspectType can be manual (/remin or :InspectUnit), auto (Auto inspect in arenas), inspect (Inspected through Blizzards UI)
-	
-]]
+-- Registering callback for auto inspect data
 function Remembrance:RegisterCallback(handler, func)
-	if( type(func) == "string" ) then
+	if( func ) then
 		talentCallback[func] = handler
 	else
 		talentCallback[func] = true
@@ -357,7 +368,7 @@ end
 -- Validate unit
 function Remembrance:ValidateUnit(unit)
 	unit = string.lower(string.trim(unit))
-	if( unit == "mouseover" or unit == "player" or unit == "target" or unit == "focus" or string.match(unit, "party[1-4]") or string.match(unit, "raid[1-40]") ) then
+	if( UnitExists(unit) or unit == "mouseover" or unit == "player" or unit == "target" or unit == "focus" or string.match(unit, "party[1-4]") or string.match(unit, "raid[1-40]") ) then
 		return true
 	end
 	
@@ -419,25 +430,7 @@ SlashCmdList["REMQUICKIN"] = function(unit)
 		return
 	end
 
-	-- We can't rely on the unitid being the same by the time the actual results arrive, we store the info ahead of time
-
-	local name, server = UnitName(unit)
-	if( not server or server == "" ) then
-		server = GetRealmName()
-	end
-
-	local class, classToken = UnitClass(unit)
-	
-	inspectData.sent = true
-	inspectData.type = "manual"
-	inspectData.name = name
-	inspectData.server = server
-	inspectData.class = class
-	inspectData.classToken = classToken
-	inspectData.timeOut = GetTime() + 3
-	
-	-- Send it off
-	NotifyInspect(unit)
+	sendInspectRequest(unit, "manual")
 end
 
 -- Reset things
