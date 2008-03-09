@@ -50,9 +50,7 @@ end
 -- Send off a inspect request
 local function sendInspectRequest(unit, type)
 	-- For some reason, we can't do NotifyInspect on the player
-
 	if( UnitIsUnit("player", unit) ) then
-
 		return
 	end
 	
@@ -75,8 +73,8 @@ end
 
 function Remembrance:INSPECT_TALENT_READY()
 	-- Sent through opening the inspection window
-	if( inspectData.type == "inspect" and InspectFrame.unit and not UnitIsUnit("player", unit) ) then
-		local class, classToken = UnitClass(inspectFrame.unit)
+	if( inspectData.type == "inspect" and InspectFrame.unit and not UnitIsUnit("player", InspectFrame.unit) ) then
+		local class, classToken = UnitClass(InspectFrame.unit)
 		local name, server = UnitName(InspectFrame.unit)
 		if( not server or server == "" ) then
 			server = GetRealmName()
@@ -154,18 +152,10 @@ end
 
 -- Hook the inspection frame being shown, and the validation checks
 function Remembrance:HookInspect()
-	if( Orig_CanInspect ) then
+	if( Orig_InspectFrame_Show ) then
 		return
 	end
 	
-	Orig_CanInspect = CanInspect
-	CanInspect = function(unit, ...)
-		if( UnitIsPlayer(unit) ) then
-			return true
-		end
-
-		return Orig_CanInspect(unit, ...)
-	end
 
 	Orig_InspectFrame_Show = InspectFrame_Show
 	InspectFrame_Show = function(...)
@@ -425,8 +415,8 @@ SlashCmdList["REMQUICKIN"] = function(unit)
 		return
 
 	-- Make sure they can be inspected
-	elseif( not UnitIsPlayer(unit) or not UnitExists(unit) ) then
-		self:Print(string.format(L["Cannot inspect unit \"%s\", you can only inspect players, and people who are within visible range (100 yards) of you."], unit))
+	elseif( not UnitIsPlayer(unit) or not UnitExists(unit) or not CanInspect(unit) ) then
+		self:Print(string.format(L["Cannot inspect unit \"%s\", you can only inspect players of the same faction, or other-faction players who aren't flagged/hostile and are within 30 yards."], unit))
 		return
 	end
 
