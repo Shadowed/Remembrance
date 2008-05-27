@@ -23,7 +23,6 @@ function Remembrance:OnInitialize()
 	
 	if( not RemembranceDB ) then
 		RemembranceDB = {
-			auto = true,
 			tree = false,
 		}
 	end
@@ -36,11 +35,6 @@ end
 function Remembrance:OnEnable()
 	self:RegisterEvent("ADDON_LOADED")
 	self:RegisterEvent("INSPECT_TALENT_READY")
-
-	if( RemembranceDB.auto ) then
-		self:RegisterEvent("ZONE_CHANGED_NEW_AREA")
-		self:RegisterEvent("PLAYER_ENTERING_WORLD", "ZONE_CHANGED_NEW_AREA")
-	end
 end
 
 function Remembrance:OnDisable()
@@ -82,8 +76,8 @@ function Remembrance:INSPECT_TALENT_READY()
 		
 		self:SaveTalentInfo(name, server, class, classToken)
 	
-	-- Manually sent through /rem, or it's an auto inspect
-	elseif( inspectData.type == "manual" or inspectData.type == "auto" ) then
+	-- Manually sent through /rem
+	elseif( inspectData.type == "manual" ) then
 		self:SaveTalentInfo(inspectData.name, inspectData.server, inspectData.class, inspectData.classToken)
 	end
 	
@@ -130,7 +124,7 @@ function Remembrance:SaveTalentInfo(name, server, class, classToken)
 	RemembranceTalents[name] = talent
 	
 	-- Output talent info
-	if( ( inspectData.type == "auto" and oldTree ~= talent ) or inspectData.type ~= "inspect" ) then
+	if( inspectData.type ~= "inspect" ) then
 		if( RemembranceDB.tree ) then
 			self:Print(string.format("%s (%s): %s (%d), %s (%d), %s (%d)", name, class, firstName or L["Unknown"], firstPoints or 0, secondName or L["Unknown"], secondPoints or 0, thirdName or L["Unknown"], thirdPoints or 0))
 		else
@@ -175,63 +169,6 @@ function Remembrance:ADDON_LOADED(event, addon)
 		self:HookInspect()
 		self:UnregisterEvent("ADDON_LOADED")
 	end
-end
-
--- For doing auto inspection inside arenas
-function Remembrance:ZONE_CHANGED_NEW_AREA(event)
-	local type = select(2, IsInInstance())
-	-- Inside an arena, but wasn't already
-	if( type == "arena" and type ~= instanceType ) then
-		self:RegisterEvent("UPDATE_MOUSEOVER_UNIT")
-		self:RegisterEvent("PLAYER_TARGET_CHANGED")
-		self:RegisterEvent("PLAYER_FOCUS_CHANGED")
-				
-	-- Was in an arena, but left it
-	elseif( type ~= "arena" and instanceType == "arena" ) then
-		self:UnregisterEvent("UPDATE_MOUSEOVER_UNIT")
-		self:UnregisterEvent("PLAYER_TARGET_CHANGED")
-		self:UnregisterEvent("PLAYER_FOCUS_CHANGED")
-		
-		-- Wipe our already inspected DB
-		for k in pairs(alreadyInspected) do
-			alreadyInspected[k] = nil
-		end
-	end
-	
-	instanceType = type
-end
-
-function Remembrance:ScanUnit(unit)
-	if( ( inspectData.sent and inspectData.timeOut < GetTime() ) or not UnitIsVisible(unit) or not UnitIsPlayer(unit) or not UnitIsEnemy("player", unit) ) then
-		return
-	end
-	
-	local name, server = UnitName(unit)
-	
-	-- Already inspected them, don't bother again
-	if( alreadyInspected[name] ) then
-		return
-	end
-
-	if( not server or server == "" ) then
-		server = GetRealmName()
-	end
-	
-	alreadyInspected[name] = true
-	sendInspectRequest(unit, "auto")
-end
-
--- For auto inspection
-function Remembrance:PLAYER_TARGET_CHANGED()
-	self:ScanUnit("target")
-end
-
-function Remembrance:UPDATE_MOUSEOVER_UNIT()
-	self:ScanUnit("mouseover")
-end
-
-function Remembrance:PLAYER_FOCUS_CHANGED()
-	self:ScanUnit("focus")
 end
 
 -- Output (SHOCKING)
@@ -452,18 +389,6 @@ SlashCmdList["REMEMBRANCE"] = function(msg)
 			self:Print(L["No longer showing full tree names."])
 		end
 	
-	elseif( msg == "auto" ) then
-		RemembranceDB.auto = not RemembranceDB.auto
-		
-		if( RemembranceDB.auto ) then
-			self:Print(L["Now auto inspecting enemies inside arenas."])
-		else
-			self:Print(L["No longer auto inspecting enemies inside arenas."])
-		end
-		
-		self:OnDisable()
-		self:OnEnable()
-		
 	elseif( msg == "cancel" ) then
 		self:Print(L["Sync canceled, if you still have issues please do a /console reloadui. It'll usually take a few seconds for results to come back however from /reminspect."])
 
@@ -476,7 +401,6 @@ SlashCmdList["REMEMBRANCE"] = function(msg)
 		self:Echo(L["/inspect <unit> - Inspect a player, allows you to see the full talent tree."])
 		self:Echo(L["/reminspect <unit> - Gets quick talent information for a player, shows name, server and total points spent."])
 		self:Echo(L["/remembrance tree - Toggles showing full tree names instead of simply ##/##/##"])
-		self:Echo(L["/remembrance auto - Toggles automatic inspection in arenas"])
 		self:Echo(L["/remembrance cancel - Cancels a sent /reminspect request (shouldn't need this)."])
 		self:Echo("")
 		self:Echo(L["Both /inspect and /reminspect work regardless of player faction, and range as long as they're within 100 yards. You still cannot get the gear of a player from an enemy faction however."])
