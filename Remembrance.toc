@@ -1,15 +1,9 @@
-## Interface: 20400
+## Interface: 30000
 ## Title: Remebrance
 ## Notes: Saves and shows players talents
 ## Version: $Revision: 322 $
 ## Author: Mayen
-## SavedVariables: RemembranceTalents, RemembranceDB, RemembranceTrees
-## OptionalDeps: OptionHouse, HousingAuthority
-
-libs\LibStub-1.0\LibStub-1.0.xml
-libs\CallbackHandler-1.0\CallbackHandler-1.0.xml
-libs\AceAddon-3.0\AceAddon-3.0.xml
-libs\AceEvent-3.0\AceEvent-3.0.xml
+## SavedVariables: RemembranceDB
 
 localization.enUS.lua
 localization.frFR.lua
